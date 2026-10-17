@@ -6,6 +6,7 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  ComposedChart,
   Legend,
   Line,
   LineChart,
@@ -25,11 +26,24 @@ import {
   prettyDate,
   rangeDates,
   shortDate,
+  todayISO,
   weekday,
 } from '../lib.js';
 
 const ALL = 'all';
 const MONEY_CATS = CATEGORIES.filter((c) => c.money);
+// Categories shown in the "Where the money came from" bars (no total / fuel)
+const BREAKDOWN_EXCLUDE = ['total_sales', 'fuel_sales'];
+const EXPECTED_COLOR = '#f59e0b'; // amber
+const LAST_WEEK_COLOR = '#94a3b8'; // slate
+
+// ---- small date helpers (UTC-safe, no timezone drift) ----
+const addDays = (iso, n) => {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+const dow = (iso) => new Date(`${iso}T00:00:00Z`).getUTCDay();
 
 function StatCard({ label, value, sub, color }) {
   return (
@@ -44,6 +58,13 @@ function StatCard({ label, value, sub, color }) {
 
 function ChartTooltip({ active, payload, label, isMoney }) {
   if (!active || !payload?.length) return null;
+  const fmt = (v) => (v == null ? '—' : isMoney ? money(v) : v);
+  const point = payload[0]?.payload || {};
+  const actual = point.__actual;
+  const expected = point.__expected;
+  const diff =
+    actual != null && expected ? ((actual - expected) / expected) * 100 : null;
+
   return (
     <div className="rounded-xl bg-white px-3 py-2 text-sm shadow-lg ring-1 ring-slate-200">
       <p className="mb-1 font-semibold text-slate-800">
@@ -52,9 +73,14 @@ function ChartTooltip({ active, payload, label, isMoney }) {
       {payload.map((p) => (
         <p key={p.dataKey} className="flex items-center gap-2 text-slate-600">
           <span className="h-2 w-2 rounded-full" style={{ background: p.color }} />
-          {p.name}: <b className="text-slate-900">{isMoney ? money(p.value) : p.value}</b>
+          {p.name}: <b className="text-slate-900">{fmt(p.value)}</b>
         </p>
       ))}
+      {diff != null && (
+        <p className={`mt-1 text-xs font-semibold ${diff >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+          {diff >= 0 ? '▲' : '▼'} {Math.abs(diff).toFixed(1)}% vs expected
+        </p>
+      )}
     </div>
   );
 }
@@ -63,11 +89,13 @@ export default function Dashboard({ onAdd }) {
   const [range, setRange] = useState('this_week');
   const [cat, setCat] = useState('shop_sales');
   const [rows, setRows] = useState([]);
+  const [history, setHistory] = useState([]); // every entry ever, used for last week + expected
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   const { from, to } = useMemo(() => rangeDates(range), [range]);
 
+  // Entries for the selected period
   useEffect(() => {
     let alive = true;
     setLoading(true);
@@ -82,23 +110,73 @@ export default function Dashboard({ onAdd }) {
     };
   }, [from, to]);
 
+  // All available history (loaded once) for last-week and expected-average lines
+  useEffect(() => {
+    let alive = true;
+    api
+      .list('2000-01-01', todayISO())
+      .then((r) => alive && setHistory(r))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // Index history by date, and group by weekday (sorted oldest → newest)
+  const { byDate, byWeekday } = useMemo(() => {
+    const byDate = {};
+    const byWeekday = [[], [], [], [], [], [], []];
+    [...history]
+      .sort((a, b) => (a.entry_date < b.entry_date ? -1 : 1))
+      .forEach((r) => {
+        byDate[r.entry_date] = r;
+        byWeekday[dow(r.entry_date)].push(r);
+      });
+    return { byDate, byWeekday };
+  }, [history]);
+
+  // Expected value for a category on a date = average of that category on the
+  // same weekday over ALL earlier entries (e.g. every previous Friday).
+  const expectedFor = (date, catId) => {
+    const prior = byWeekday[dow(date)].filter((r) => r.entry_date < date);
+    if (!prior.length) return null;
+    return prior.reduce((a, r) => a + r[catId], 0) / prior.length;
+  };
+
   // One point per calendar day; days without an entry are null (gap in the line).
   const series = useMemo(() => {
-    const byDate = Object.fromEntries(rows.map((r) => [r.entry_date, r]));
+    const periodByDate = Object.fromEntries(rows.map((r) => [r.entry_date, r]));
     return eachDay(from, to).map((d) => {
-      const r = byDate[d];
+      const r = periodByDate[d];
+      const lw = byDate[addDays(d, -7)];
       const point = { date: d };
       CATEGORIES.forEach((c) => {
         point[c.id] = r ? r[c.id] : null;
+        point[`${c.id}__last`] = lw ? lw[c.id] : null;
+        point[`${c.id}__exp`] = expectedFor(d, c.id);
       });
       return point;
     });
-  }, [rows, from, to]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, from, to, byDate, byWeekday]);
 
   const isAll = cat === ALL;
   const active = isAll ? null : catById(cat);
   const isMoney = isAll ? true : active.money;
   const longRange = series.length > 45;
+
+  // Series for the single-category chart (adds the 3 named keys + tooltip helpers)
+  const chartData = useMemo(() => {
+    if (isAll) return series;
+    return series.map((p) => ({
+      ...p,
+      current: p[active.id],
+      lastWeek: p[`${active.id}__last`],
+      expected: p[`${active.id}__exp`],
+      __actual: p[active.id],
+      __expected: p[`${active.id}__exp`],
+    }));
+  }, [series, isAll, active]);
 
   // Stats for the selected category
   const statCat = isAll ? catById('total_sales') : active;
@@ -109,12 +187,32 @@ export default function Dashboard({ onAdd }) {
     return { sum, avg: vals.length ? sum / vals.length : 0, best, days: vals.length };
   }, [rows, statCat]);
 
+  // Period comparison: actual vs expected, and vs last week (only days where both exist)
+  const compare = useMemo(() => {
+    if (isAll) return null;
+    let act = 0, exp = 0, act2 = 0, lw = 0;
+    chartData.forEach((p) => {
+      if (p.current != null && p.expected != null) {
+        act += p.current;
+        exp += p.expected;
+      }
+      if (p.current != null && p.lastWeek != null) {
+        act2 += p.current;
+        lw += p.lastWeek;
+      }
+    });
+    return {
+      vsExpected: exp ? ((act - exp) / exp) * 100 : null,
+      vsLast: lw ? ((act2 - lw) / lw) * 100 : null,
+    };
+  }, [chartData, isAll]);
+
   const fmt = (n) => (statCat.money ? money(n) : Math.round(n).toLocaleString());
 
-  // Breakdown bars: shop, fuel, etc. totals for the period
+  // Breakdown bars: shop, tobacco, pie face, BBQ gas… (no total, no fuel)
   const breakdown = useMemo(
     () =>
-      MONEY_CATS.filter((c) => c.id !== 'total_sales').map((c) => ({
+      MONEY_CATS.filter((c) => !BREAKDOWN_EXCLUDE.includes(c.id)).map((c) => ({
         name: c.label,
         color: c.color,
         value: rows.reduce((a, r) => a + r[c.id], 0),
@@ -124,6 +222,17 @@ export default function Dashboard({ onAdd }) {
 
   const tickFmt = (d) => shortDate(d);
   const yFmt = (v) => (isMoney ? moneyShort(v) : v);
+
+  const Delta = ({ label, value }) =>
+    value == null ? null : (
+      <span
+        className={`rounded-full px-3 py-1 text-xs font-semibold ${
+          value >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+        }`}
+      >
+        {value >= 0 ? '▲' : '▼'} {Math.abs(value).toFixed(1)}% {label}
+      </span>
+    );
 
   return (
     <div className="space-y-6">
@@ -190,9 +299,17 @@ export default function Dashboard({ onAdd }) {
       {/* Main chart */}
       <div className="card p-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-lg font-bold text-slate-900">
-            {isAll ? 'All categories' : active.label} by day
-          </h2>
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">
+              {isAll ? 'All categories' : active.label} by day
+            </h2>
+            {compare && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Delta label="vs expected average" value={compare.vsExpected} />
+                <Delta label="vs last week" value={compare.vsLast} />
+              </div>
+            )}
+          </div>
           <div className="flex flex-wrap gap-1.5">
             <button
               onClick={() => setCat(ALL)}
@@ -254,10 +371,10 @@ export default function Dashboard({ onAdd }) {
                   ))}
                 </LineChart>
               ) : (
-                <AreaChart data={series} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                <ComposedChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="fill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={active.color} stopOpacity={0.35} />
+                      <stop offset="0%" stopColor={active.color} stopOpacity={0.3} />
                       <stop offset="100%" stopColor={active.color} stopOpacity={0.02} />
                     </linearGradient>
                   </defs>
@@ -265,25 +382,54 @@ export default function Dashboard({ onAdd }) {
                   <XAxis dataKey="date" tickFormatter={tickFmt} tick={{ fontSize: 12, fill: '#64748b' }} minTickGap={24} />
                   <YAxis tickFormatter={yFmt} tick={{ fontSize: 12, fill: '#64748b' }} width={52} />
                   <Tooltip content={<ChartTooltip isMoney={isMoney} />} />
-                  <Area
+                  <Legend verticalAlign="top" height={32} />
+
+                  {/* Background: same day last week (muted, dashed) */}
+                  <Line
                     type="monotone"
-                    dataKey={active.id}
-                    name={active.label}
-                    stroke={active.color}
-                    strokeWidth={3}
-                    fill="url(#fill)"
-                    dot={!longRange}
-                    activeDot={{ r: 5 }}
+                    dataKey="lastWeek"
+                    name="Last week"
+                    stroke={LAST_WEEK_COLOR}
+                    strokeWidth={2}
+                    strokeDasharray="6 4"
+                    strokeOpacity={0.9}
+                    dot={false}
+                    activeDot={{ r: 4 }}
                     connectNulls
                   />
-                </AreaChart>
+                  {/* Background: expected = average of all previous same weekdays */}
+                  <Line
+                    type="monotone"
+                    dataKey="expected"
+                    name="Expected (avg)"
+                    stroke={EXPECTED_COLOR}
+                    strokeWidth={2}
+                    strokeDasharray="2 4"
+                    strokeLinecap="round"
+                    dot={false}
+                    activeDot={{ r: 4 }}
+                    connectNulls
+                  />
+                  {/* Foreground: this period (highlighted) */}
+                  <Area
+                    type="monotone"
+                    dataKey="current"
+                    name="This period"
+                    stroke={active.color}
+                    strokeWidth={3.5}
+                    fill="url(#fill)"
+                    dot={!longRange}
+                    activeDot={{ r: 6 }}
+                    connectNulls
+                  />
+                </ComposedChart>
               )}
             </ResponsiveContainer>
           )}
         </div>
       </div>
 
-      {/* Breakdown */}
+      {/* Breakdown (shop, tobacco, pie face, BBQ gas — no fuel / total) */}
       {rows.length > 0 && (
         <div className="card p-5">
           <h2 className="mb-4 text-lg font-bold text-slate-900">Where the money came from</h2>
