@@ -29,6 +29,7 @@ import {
   todayISO,
   weekday,
 } from '../lib.js';
+import Insights from './Insights.jsx';
 
 const ALL = 'all';
 const MONEY_CATS = CATEGORIES.filter((c) => c.money);
@@ -433,7 +434,8 @@ export default function Dashboard({ onAdd }) {
       {rows.length > 0 && (
         <div className="card p-5">
           <h2 className="mb-4 text-lg font-bold text-slate-900">Where the money came from</h2>
-          <div className="h-64 w-full">
+            <Insights rows={rows} history={history} from={from} to={to} />
+          <div className="h-64 mt-7 w-full">
             <ResponsiveContainer>
               <BarChart data={breakdown} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
