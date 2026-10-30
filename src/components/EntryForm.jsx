@@ -108,13 +108,13 @@ export default function EntryForm({ initialDate, onSaved }) {
   };
 
   return (
-    <form onSubmit={submit} className="card mx-auto max-w-2xl p-6 sm:p-8">
+    <form onSubmit={submit} className="card x-hero text-white mx-auto max-w-2xl p-6 sm:p-8">
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-xl font-extrabold text-slate-900">
+          <h2 className="text-xl font-extrabold text-white-900">
             {exists ? 'Edit entry' : 'New daily entry'}
           </h2>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-white-500">
             {weekday(date)}, {prettyDate(date)}
             {exists && <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">already saved</span>}
           </p>
@@ -152,8 +152,8 @@ export default function EntryForm({ initialDate, onSaved }) {
             )}
           </div>
         ))}
-        <div className="grid items-center gap-2 py-3 sm:grid-cols-[180px_1fr] sm:gap-6">
-          <label htmlFor="notes" className="font-semibold text-slate-600">
+        <div className="grid items-center gap-2 py-3 sm:grid-cols-[180px_1fr] sm:gap-6 ">
+          <label htmlFor="notes" className="font-semibold text-slate-600 ">
             <span className="mr-2 text-lg">📝</span>Notes
           </label>
           <input

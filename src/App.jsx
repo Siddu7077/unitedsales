@@ -30,7 +30,7 @@ export default function App() {
             <p className="text-sm text-slate-500">Fuel · Shop · Tobacco · Pie Face</p>
           </div>
         </div>
-        <nav className="flex gap-1 rounded-full bg-white p-1 shadow-sm ring-1 ring-slate-200">
+        <nav className="flex gap-1 x-pill rounded-full p-1 shadow-sm ring-1 ring-slate-200">
           {TABS.map((t) => (
             <button
               key={t.id}
@@ -41,7 +41,7 @@ export default function App() {
               className={`pill ${
                 tab === t.id
                   ? 'bg-indigo-600 text-white shadow'
-                  : 'text-slate-600 hover:bg-slate-100'
+                  : 'text-white-600 hover:bg-black-100'
               }`}
             >
               <span className="mr-1.5">{t.icon}</span>
