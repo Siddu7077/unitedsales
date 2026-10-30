@@ -26,7 +26,7 @@ export default function App() {
             ⛽
           </div>
           <div>
-            <h1 className="text-xl font-extrabold tracking-tight text-slate-900">Daily Sales</h1>
+            <h1 className="text-xl font-extrabold tracking-tight text-white-900">Daily Sales</h1>
             <p className="text-sm text-slate-500">Fuel · Shop · Tobacco · Pie Face</p>
           </div>
         </div>
