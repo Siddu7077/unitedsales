@@ -13,12 +13,12 @@ const EMPTY = {
 };
 
 const FIELDS = [
-  { key: 'total_sales', label: 'Total sales', icon: '💰', color: 'text-indigo-600' },
-  { key: 'fuel_sales', label: 'Fuel sale', icon: '⛽', color: 'text-orange-500' },
-  { key: 'shop_sales', label: 'Shop sale', icon: '🛒', color: 'text-violet-600' },
-  { key: 'bbq_gas', label: 'BBQ gas', icon: '🔥', color: 'text-teal-600' },
-  { key: 'tobacco', label: 'Tobacco', icon: '🚬', color: 'text-pink-600', special: true },
-  { key: 'pie_face_sales', label: 'Pie Face', icon: '🥧', color: 'text-yellow-600' },
+  { key: 'total_sales', label: 'Total sales', icon: '💰', color: 'text-white-600' },
+  { key: 'fuel_sales', label: 'Fuel sale', icon: '⛽', color: 'text-white-500' },
+  { key: 'shop_sales', label: 'Shop sale', icon: '🛒', color: 'text-white-600' },
+  { key: 'bbq_gas', label: 'BBQ gas', icon: '🔥', color: 'text-white-600' },
+  { key: 'tobacco', label: 'Tobacco', icon: '🚬', color: 'text-white-600', special: true },
+  { key: 'pie_face_sales', label: 'Pie Face', icon: '🥧', color: 'text-white-600' },
 ];
 
 function Money({ value, onChange, id }) {
@@ -131,7 +131,7 @@ export default function EntryForm({ initialDate, onSaved }) {
       <div className="divide-y divide-slate-100">
         {FIELDS.map((f) => (
           <div key={f.key} className="grid items-center gap-2 py-3 sm:grid-cols-[180px_1fr] sm:gap-6">
-            <label htmlFor={f.key} className={`flex items-center gap-2 font-semibold ${f.color}`}>
+            <label htmlFor={f.key} className={`flex items-center gap-2 font-extrabold ${f.color}`}>
               <span className="text-lg">{f.icon}</span>
               {f.label}
             </label>
@@ -153,7 +153,7 @@ export default function EntryForm({ initialDate, onSaved }) {
           </div>
         ))}
         <div className="grid items-center gap-2 py-3 sm:grid-cols-[180px_1fr] sm:gap-6 ">
-          <label htmlFor="notes" className="font-semibold text-slate-600 ">
+          <label htmlFor="notes" className="font-extrabold text-white-600 ">
             <span className="mr-2 text-lg">📝</span>Notes
           </label>
           <input
